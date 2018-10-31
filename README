@@ -1,0 +1,23 @@
+VHal -- an implementation of the Hal theorem prover by L.C. Paulson
+
+Introduction
+------------
+
+Hal is a theorem prover for classical first-order logic presented in
+the book _ML for the Working Programmer_ by L.C. Paulson.  It works by
+constructing proofs backwards from a goal; through refinement.  Hal
+provides tactics and tacticals to promote interactive use.  More details
+can be found on the book's website[1].
+
+This is a simple implementation of Hal in Coq, written as part of a
+Final Project for the course CS 643 - Formal Verification of Software
+at Stevens Institute of Technology.
+
+(10/31/2018) Note: this repository is a work in progress.
+The implementation has not been written yet.
+
+
+References
+----------
+
+[1] https://www.cl.cam.ac.uk/~lp15/MLbook/
