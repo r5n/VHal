@@ -1,1 +1,4 @@
--R theory/ VHal
+theory/Fol.v
+theory/Util.v
+
+-R . VHal
