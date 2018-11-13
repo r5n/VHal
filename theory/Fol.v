@@ -5,7 +5,6 @@ Require Import Strings.String.
 Require Import Coq.Lists.List.
 Import ListNotations.
 Require Import VHal.theory.Util.
-(* Open Scope string_scope. (* learn to use strings properly *) *)
 
 Inductive term : Set :=
 | Var : string -> term                           (* a name *)
@@ -66,26 +65,119 @@ Section formula_ind'.
     end.
 End formula_ind'.
 
+
 (* https://bit.ly/2D7M02y *)
 Parameter term_eq_dec : forall (σ τ : term), { σ = τ } + { σ <> τ }.
 
-Definition beq_term (s : term) (t : term) :=
-  if term_eq_dec s t then true else false.
+(* Definition beq_term (s : term) (t : term) := *)
+(*   if term_eq_dec s t then true else false. *)
 
-(* https://bit.ly/2RNCENB *)
-Definition replace_one (u1 : term) (u2 : term) (t : term) :=
-  if beq_term t u1 then u2 else
-    let fix replace_one_aux (u1 : term) (u2 : term) (t : term) { struct t } : term :=
-        match t with
-        | Fun a args =>
-          (Fun a
-               ((fix replace_one_many_aux u1 u2 ts :=
-                   match ts with
-                   | [] => []
-                   | t :: ts =>
-                     (replace_one_aux u1 u2 t)
-                       :: (replace_one_many_aux u1 u2 ts)
-                   end) u1 u2 args))
-        | _ => t
-        end
-    in replace_one_aux u1 u2 t.
+Fixpoint beq_term (t1 : term) (t2 : term) : bool :=
+  match t1, t2 with
+  | Var u, Var v => beq_string u v
+  | Param s st, Param s' st' =>
+    beq_string s s' && beq_string_list st st'
+  | Bound n, Bound m => beq_nat n m
+  | Fun u us, Fun v vs =>
+    beq_string u v &&
+    ((fix beq_term_list (us : list term) (vs : list term) : bool :=
+        match us, vs with
+        | [], [] => true
+        | _, [] => false
+        | [], _ => false
+        | x :: xs, y :: ys => andb (beq_term x y) (beq_term_list xs ys)
+        end) us vs)
+  | _, _ => false
+  end.
+
+Theorem beq_term_refl : forall t : term,
+    beq_term t t = true.
+Proof.
+  apply term_ind'; (try intros; simpl; (try unfold andb);
+                    (try rewrite beq_string_refl); (try reflexivity);
+                    (try assumption)).
+  - apply beq_string_list_refl.
+  - symmetry. apply beq_nat_refl.
+  - induction ls as [| t' ls' IHls']; (try reflexivity).
+    + inversion H. rewrite H2. apply IHls'. assumption.
+Qed.
+
+(* Show [beq_term_comm] and maybe [beq_term_correct] *)
+    
+
+(* look at https://bit.ly/2RNCENB for dealing with nested inductive types *)
+
+(* [replace] : replace the term [u1] with [u2] throughout a term [t] *)
+Fixpoint replace' (u1 : term) (u2 : term) (t : term) : term :=
+  if beq_term u1 t then u2 else
+    match t with
+    | Fun a ts => Fun a
+      ((fix replace'_list (u1 : term) (u2 : term) (ts : list term) { struct ts } :=
+          match ts with
+          | [] => []
+          | s :: ss => (replace' u1 u2 s) :: (replace'_list u1 u2 ss)
+          end) u1 u2 ts)
+    | _ => t
+    end.
+      
+Example replace_test1 : replace' (Var "x") (Var "y") (Var "x") = Var "y".
+Proof. reflexivity. Qed.
+
+Example replace_test2 : replace' (Var "x") (Var "y") (Fun "x" [Var "x"; Var "y"])
+                        = Fun "x" [Var "y"; Var "y"].
+Proof. reflexivity. Qed.
+
+(* Abstraction of a formula over the atomic term t *)
+Fixpoint abstract' (i : nat) (t : term) (f : formula) :=
+  match f with
+  | Pred a ts => Pred a (map (replace' t (Bound i)) ts)
+  | Conn b ps => Conn b
+    ((fix abstract'_list (i : nat) (t : term) (fs : list formula) { struct fs } :=
+        match fs with
+        | [] => []
+        | f :: fs' => (abstract' i t f) :: (abstract'_list i t fs')
+        end) i t ps)
+  | Quant qnt b p => Quant qnt b (abstract' (S i) t p)
+  end.
+
+Compute abstract' O (Var "x") (Conn "/\" [(Pred "1" [Var "x"]); (Pred "2" [Var "y"])]).
+
+Example abstract'_test1 :
+  abstract' O (Var "x") (Conn "\/" [(Pred "H1" [Var "x"; Var "y"]);
+                                      (Pred "H2" [Var "y"; Var "x"])])
+  = Conn "\/" [(Pred "H1" [Bound 0; Var "y"]); (Pred "H2" [Var "y"; Bound 0])].
+Proof. reflexivity. Qed.
+
+Example abstract'_test2 :
+  abstract' O (Var "x") (Quant "forall" "x" (Pred "P" [Var "x"]))
+  = Quant "forall" "x" (Pred "P" [Bound (S O)]).
+Proof. reflexivity. Qed.
+
+(* Replace [Bound i] by [t] in [f].  [t] may contain no bound variables *)
+Fixpoint subst' (i : nat) (t : term) (f : formula) : formula :=
+  match f with
+  | Pred a ts => Pred a (map (replace' (Bound i) t) ts)
+  | Conn b ps => Conn b
+    ((fix subst'_list (i : nat) (t : term) (fs : list formula) { struct fs } :=
+        match fs with
+        | [] => []
+        | f :: fs' => (subst' i t f) :: (subst'_list i t fs')
+        end) i t ps)
+  | Quant qnt b p => Quant qnt b (subst' (S i) t p)
+  end.
+
+Example subst'_test1 :
+  subst' (S O) (Var "x") (Conn "/\" [Quant "forall" "x" (Pred "P" [Bound (S (S O))]);
+                                       Quant "exists" "y" (Pred "Q" [Var "y"])])
+  = (Conn "/\" [Quant "forall" "x" (Pred "P" [Var "x"]);
+                  Quant "exists" "y" (Pred "Q" [Var "y"])]).
+Proof. reflexivity. Qed.
+
+Example subst'_test2 :
+  subst' O (Var "x") (Pred "x" [Bound O]) = Pred "x" [Var "x"].
+Proof. reflexivity. Qed.
+
+Example subst'_test3 :
+  subst' O (Bound O) (Pred "x" [Bound O]) = Pred "x" [Bound O].
+Proof. reflexivity. Qed.
+
