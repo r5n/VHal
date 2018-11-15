@@ -6,6 +6,10 @@ Require Import Coq.Lists.List.
 Import ListNotations.
 Require Import VHal.theory.Util.
 
+Open Scope string_scope.
+
+(*+ Terms and Formulae *)
+
 Inductive term : Set :=
 | Var : string -> term                           (* a name *)
 | Param : string -> list string -> term           (* list of forbidden names *)
@@ -17,9 +21,12 @@ Inductive formula : Set :=
 | Conn : string -> list formula -> formula        (* connective; list of formulae *)
 | Quant : string -> string -> formula -> formula.  (* quantifier; var name; body *)
 
+Check term_ind.
+
 Inductive goal : Set :=
 | G : list formula * list formula -> goal.
 
+(*! Induction principle for [term] *)
 Section term_ind'.
   Variable P : term -> Prop.
 
@@ -43,6 +50,7 @@ Section term_ind'.
     end.
 End term_ind'.
 
+(*! Induction principle for [formula] *)
 Section formula_ind'.
   Variable P : formula -> Prop.
 
@@ -90,20 +98,22 @@ Fixpoint beq_term (t1 : term) (t2 : term) : bool :=
   | _, _ => false
   end.
 
+
 Theorem beq_term_refl : forall t : term,
     beq_term t t = true.
 Proof.
-  apply term_ind'; (try intros; simpl; (try unfold andb);
-                    (try rewrite beq_string_refl); (try reflexivity);
-                    (try assumption)).
-  - apply beq_string_list_refl.
-  - symmetry. apply beq_nat_refl.
-  - induction ls as [| t' ls' IHls']; (try reflexivity).
-    + inversion H. rewrite H2. apply IHls'. assumption.
+  apply term_ind'; (try intros; simpl; symmetry).
+  - apply beq_string_refl.
+  - rewrite <- beq_string_refl. rewrite beq_string_list_refl.
+    reflexivity.
+  - apply beq_nat_refl.
+  - induction ls as [| t' ls' IHls'].
+    + rewrite <- beq_string_refl. reflexivity.
+    + inversion H. apply IHls' in H3. rewrite H2. simpl.
+      assumption.
 Qed.
 
-(* Show [beq_term_comm] and maybe [beq_term_correct] *)
-    
+(*+ Functions on terms *)
 
 (* look at https://bit.ly/2RNCENB for dealing with nested inductive types *)
 
@@ -180,4 +190,27 @@ Proof. reflexivity. Qed.
 Example subst'_test3 :
   subst' O (Bound O) (Pred "x" [Bound O]) = Pred "x" [Bound O].
 Proof. reflexivity. Qed.
+
+Fixpoint term_vars (t : term) (ps : list string) : list string :=
+  match t with
+  | Var a => insert_string a ps
+  | Fun _ ts => List.fold_right term_vars ps ts
+  | _ => ps
+  end.
+
+Example term_vars_test1 :
+  term_vars (Var "x") [] = ["x"].
+Proof. reflexivity. Qed.
+
+Example term_vars_test2 :
+  term_vars (Fun "a" [Var "x"; Var "y"; Fun "a" [Var "c"; Var "d"]]) []
+  = ["d"; "c"; "y"; "x"].
+Proof. reflexivity. Qed.
+
+Fixpoint term_params (t : term) (ps : list (string * list string)) :=
+  match t with
+  | Param a xs => (a, xs) :: ps
+  | Fun _ ts => List.fold_right term_params ps ts
+  | _ => ps
+  end.
 

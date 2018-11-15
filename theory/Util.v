@@ -2,86 +2,56 @@ Set Warnings "-notation,-overridden,-parsing".
 Require Import Coq.Init.Nat.
 Require Import Ascii.
 Require Import Coq.Strings.String.
+Require Import Coq.Lists.List.
+Import ListNotations.
+
 Open Scope string_scope.
-Open Scope list_scope.
-
-Notation "x :: y" := (cons x y)
-                       (at level 60, right associativity).
-Notation "[ ]" := nil.
-Notation "[ x ; .. ; y ]" := (cons x .. (cons y []) .. ).
-Notation "x ++ y" := (app x y)
-                       (at level 60, right associativity).
-
-Fixpoint map {X Y : Type} (f: X->Y) (l: list X) : (list Y) :=
-  match l with
-  | [] => []
-  | h :: t => (f h) :: (map f t)
-  end.
 
 Definition beq_nat := PeanoNat.Nat.eqb.
 
-Fixpoint beq_string (s1 : string) (s2 : string) :=
-  match s1 with
-  | "" => match s2 with
-         | "" => true
-         | _ => false
-         end
-  | String a s1' => match s2 with
-                   | "" => false
-                   | String b s2' =>
-                     let a' := nat_of_ascii a in
-                     let b' := nat_of_ascii b in
-                     andb (beq_nat a' b') (beq_string s1' s2')
-                   end
-  end.
+Definition beq_string x y :=
+  if string_dec x y then true else false.
 
-(* Definition beq_string (s1 : string) (s2 : string) := *)
-(*   if string_dec s1 s2 then true else false. *)
-
-Lemma beq_string_refl : forall (s : string),
-    beq_string s s = true.
+Theorem beq_string_refl : forall s, true = beq_string s s.
 Proof.
-  intros. induction s as [| a s]; try reflexivity.
-  - simpl. rewrite <- EqNat.beq_nat_refl. assumption.
+  intros s. unfold beq_string. destruct (string_dec s s) as [| Hs].
+  - reflexivity.
+  - destruct Hs. reflexivity.
 Qed.
 
-Lemma beq_string_empty_r : forall (s : string),
-    beq_string s "" = true -> s = "".
+Theorem beq_string_true_iff : forall x y : string,
+    beq_string x y = true <-> x = y.
 Proof.
-  intros. induction s; (try reflexivity; inversion H).
+  intros x y.
+  unfold beq_string.
+  destruct (string_dec x y) as [|Hs].
+  - subst. split; reflexivity.
+  - split.
+    + intros contra. inversion contra.
+    + intros H. inversion H. subst. destruct Hs. reflexivity.
 Qed.
 
-Lemma beq_string_empty_l : forall (s : string),
-    beq_string "" s = true -> s = "".
+Theorem beq_string_false_iff : forall x y : string,
+    beq_string x y = false <-> x <> y.
 Proof.
-  intros. induction s; (try reflexivity; inversion H).
+  intros x y. rewrite <- beq_string_true_iff.
+  rewrite Bool.not_true_iff_false. reflexivity.
 Qed.
 
-Lemma beq_string_correct : forall (s : string) (t : string),
-    beq_string s t = true -> s = t.
+Theorem false_beq_string : forall x y : string,
+    x <> y -> beq_string x y = false.
 Proof.
-  intro s. induction s.
-  - intros. rewrite (beq_string_empty_l _ H). reflexivity.
-  - destruct t.
-    + discriminate.
-    + admit.
-Admitted.
-  
-Lemma beq_string_comm : forall (s : string) (t : string),
-    beq_string s t = true -> beq_string t s = true.
-Proof.
-  intros. generalize dependent s. induction t.
-  - intros. rewrite (beq_string_empty_r _ H). reflexivity.
-  - admit.
-Admitted.
-      
-Fixpoint beq_string_list (ss : list string) (ss': list string) :=
+  intros x y. rewrite beq_string_false_iff.
+  intros H. assumption.
+Qed.
+
+Fixpoint beq_string_list (ss : list string) (ts : list string) :=
   match ss with
-  | [] => match ss' with
+  | [] => match ts with
          | [] => true
          | _ => false
          end
-  | x :: xs => match ss' with
+  | x :: xs => match ts with
               | y :: ys => andb (beq_string x y) (beq_string_list xs ys)
               | _ => false
               end
@@ -92,5 +62,11 @@ Theorem beq_string_list_refl : forall (ss : list string),
 Proof.
   intros. induction ss.
   - reflexivity.
-  - simpl. rewrite beq_string_refl. assumption.
+  - simpl. rewrite <- beq_string_refl. assumption.
 Qed.
+
+Fixpoint insert_string (s : string) (ls : list string) :=
+  match ls with
+  | [] => [s]
+  | t :: ts => if string_dec s t then s :: ts else t :: (insert_string s ts)
+  end.
