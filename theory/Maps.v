@@ -84,7 +84,7 @@ Notation "m '&' {{ a --> x ; b --> y }}" :=
 Notation "m '&' {{ a --> x ; b --> y ; c --> z }}" :=
   (update (m & {{ a --> x ; b --> y }}) c z) (at level 20).
 Notation "m '&' {{ a --> x ; b --> y ; c --> z ; d --> t }}" :=
-  (update (m & {{ a --> x ; b --> y ; c --> z }}) c z) (at level 20).
+  (update (m & {{ a --> x ; b --> y ; c --> z }}) d t) (at level 20).
 
 Lemma apply_empty : forall (A : Type) (x : string), @empty A x = None.
 Proof.
@@ -113,3 +113,4 @@ Proof.
   intros X v x m H. unfold update. rewrite <- H.
   apply t_update_same.
 Qed.
+
