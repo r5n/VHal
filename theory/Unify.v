@@ -2,6 +2,10 @@ Require Import VHal.theory.Fol.
 Require Import VHal.theory.Util.
 Require Import VHal.theory.Maps.
 Require Import Coq.Lists.List.
+Require Import Recdef.
+Require Import Coq.Logic.Decidable.
+Require Import Coq.Program.Wf.
+Require Import Coq.omega.Omega.
 Import ListNotations.
 
 (*+ Environments *)
@@ -57,7 +61,6 @@ Definition chase (e : env) (t : term) :=
   | _ => Some t
   end.
 
-
 Example chase_test1 : chase [("x", Var "y"); ("y", Bound 1)] (Var "x") = Some (Bound 1).
 Proof. reflexivity. Qed.
 
@@ -75,6 +78,101 @@ Fixpoint b_exists {A : Type} (f : A -> bool) (ls : list A) : bool :=
   | h :: t => f h || b_exists f t
   end.
 
+(* Use [existsb] from the Lists library instead of [b_exists] *)
+
+Section OCCURS.
+  Variable e : env.
+
+  Inductive occurs : string -> term -> Prop :=
+  | occF : forall s t ts, Exists (occurs s) ts -> occurs s (Fun t ts)
+  | occP : forall s b bs, Exists (occurs s) (List.map Var bs) -> occurs s (Param b bs)
+  | occVb : forall s b, beq_string s b = true -> occurs s (Var b)
+  | occVr : forall s b t, env_lookup e s = Some t -> occurs s t -> occurs s (Var b).
+
+  Definition occurs_dec : forall s t, { occurs s t } + { ~ occurs s t }.
+  Proof.
+    intros. destruct t eqn:T.
+    - compute. destruct (beq_string s s0) eqn:H.
+      + left. eapply occVb. assumption.
+      + right. pose proof (occVb s s0).
+        admit.
+    - admit.
+    - admit.
+    - admit.
+      all : fail.
+  Admitted.
+End OCCURS.
+
+Print well_founded.
+Print Acc.
+Print Fix.
+
+(** * Dealing with the Occurs Check *)
+(** 1. Use an [Inductive] type and then show that the relation is decidable.
+    2. Use the [Fix] combinator with a well founded ordering
+    3. Use [Program Fixpoint] with a well founded ordering *)
+
+(** Think about other ways of defining the occurs check.  Computing the free and bound
+    variables can help *)
+
+Fixpoint sizeT (t : term) : nat :=
+  match t with
+  | Var _ => 1
+  | Fun _ ts => 1 +
+    ((fix sizeT' (ts : list term) { struct ts } :=
+        match ts with
+        | [] => 0
+        | t :: ts' => sizeT t + sizeT' ts'
+        end) ts)
+  | Param _ bs => length bs
+  | Bound _ => 1
+  end.
+
+Definition sizeOrder (t t' : term) :=
+  sizeT t < sizeT t'.
+
+Program Fixpoint occurs' (e : env) (a : string) (t : term) {measure (sizeT t)} :=
+  match t with
+  | Fun _ ts => existsb (fun y => occurs' e a y) ts
+  | Param _ bs => existsb (fun y => occurs' e a y) (List.map Var bs)
+  | Var b => orb (beq_string a b) (match env_lookup  e b with
+                                  | Some x => occurs' e a x
+                                  | _ => false
+                                  end)
+  | _ => false
+  end.
+Obligation 1.
+Proof.
+  induction y using @term_ind'.
+  - simpl.
+Admitted.
+Obligation 2.
+Admitted.
+Obligation 3.
+Admitted.
+
+Function occurs (e : env) (a : string) (t : term) { measure sizeT t } :=
+  match t with
+  | Fun _ ts => existsb (occurs e a) ts
+  | Param _ bs => existsb (occurs e a) (List.map Var bs)
+  | Var b => orb (beq_string a b) (match env_lookup e b with
+                                  | Some x => occurs e a x
+                                  | _ => false
+                                  end)
+  | _ => false
+  end.
+
+(* Function occurs (e : env) (a : string) (t : term) { measure term_size t } := *)
+(*   match t with *)
+(*   | Fun _ ts => b_exists (occurs e a) ts *)
+(*   | Param _ bs => b_exists (occurs e a) (List.map Var bs) *)
+(*   | Var b => orb (beq_string a b) (match env_lookup e b with *)
+(*                                   | Some t => occurs e a t *)
+(*                                   | _ => false *)
+(*                                   end) *)
+(*   | _ => false *)
+(*   end. *)
+
 
 (* Fixpoint occurs (e : env) (a : string) (t : term) := *)
 (*   match t with *)
@@ -87,3 +185,4 @@ Fixpoint b_exists {A : Type} (f : A -> bool) (ls : list A) : bool :=
 (*   | _ => false *)
 (*   end *)
 (* with occsl e a := b_exists (occurs e a). *)
+
