@@ -77,6 +77,12 @@ End formula_ind'.
 (* https://bit.ly/2D7M02y *)
 Parameter term_eq_dec : forall (σ τ : term), { σ = τ } + { σ <> τ }.
 
+Definition eq_term_dec : forall (t t' : term), { t = t' } + { t <> t' }.
+Proof.
+  pose eq_nat_dec. pose string_dec. pose list_eq_dec.
+  pose term_eq_dec. decide equality.
+Qed.
+
 (* Definition beq_term (s : term) (t : term) := *)
 (*   if term_eq_dec s t then true else false. *)
 
@@ -214,3 +220,6 @@ Fixpoint term_params (t : term) (ps : list (string * list string)) :=
   | _ => ps
   end.
 
+
+
+  
