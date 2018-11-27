@@ -13,11 +13,11 @@ This is a simple implementation of Hal in Coq, written as part of a
 Final Project for the course CS 643 - Formal Verification of Software
 at Stevens Institute of Technology.
 
-(10/31/2018) Note: this repository is a work in progress.
-The implementation has not been written yet.
-
+Parts of the unification routine are borrowed from Riberio et. al[2].
+This is a work in progress.
 
 References
 ----------
 
 [1] https://www.cl.cam.ac.uk/~lp15/MLbook/
+[2] https://link.springer.com/chapter/10.1007/978-3-319-29473-5_8
