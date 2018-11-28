@@ -72,28 +72,28 @@ Example chase_test3 :
   chase [("x", Var "y")] (Var "d") = None.
 Proof. reflexivity. Qed.
 
-Section OCCURS.
-  Variable e : env.
+(* Section OCCURS. *)
+(*   Variable e : env. *)
 
-  Inductive occurs : string -> term -> Prop :=
-  | occF : forall s t ts, Exists (occurs s) ts -> occurs s (Fun t ts)
-  | occP : forall s b bs, Exists (occurs s) (List.map Var bs) -> occurs s (Param b bs)
-  | occVb : forall s b, beq_string s b = true -> occurs s (Var b)
-  | occVr : forall s b t, env_lookup e s = Some t -> occurs s t -> occurs s (Var b).
+(*   Inductive occurs : string -> term -> Prop := *)
+(*   | occF : forall s t ts, Exists (occurs s) ts -> occurs s (Fun t ts) *)
+(*   | occP : forall s b bs, Exists (occurs s) (List.map Var bs) -> occurs s (Param b bs) *)
+(*   | occVb : forall s b, beq_string s b = true -> occurs s (Var b) *)
+(*   | occVr : forall s b t, env_lookup e s = Some t -> occurs s t -> occurs s (Var b). *)
 
-  Definition occurs_dec : forall s t, { occurs s t } + { ~ occurs s t }.
-  Proof.
-    intros. destruct t eqn:T.
-    - compute. destruct (beq_string s s0) eqn:H.
-      + left. eapply occVb. assumption.
-      + right. pose proof (occVb s s0).
-        admit.
-    - admit.
-    - admit.
-    - admit.
-      all : fail.
-  Admitted.
-End OCCURS.
+(*   Definition occurs_dec : forall s t, { occurs s t } + { ~ occurs s t }. *)
+(*   Proof. *)
+(*     intros. destruct t eqn:T. *)
+(*     - compute. destruct (beq_string s s0) eqn:H. *)
+(*       + left. eapply occVb. assumption. *)
+(*       + right. pose proof (occVb s s0). *)
+(*         admit. *)
+(*     - admit. *)
+(*     - admit. *)
+(*     - admit. *)
+(*       all : fail. *)
+(*   Admitted. *)
+(* End OCCURS. *)
 
 Print well_founded.
 Print Acc.
@@ -120,6 +120,20 @@ Fixpoint sizeT (t : term) : nat :=
   | Bound _ => 1
   end.
 
+Fixpoint size (t : term) : nat :=
+  match t with
+  | Var _ => 1
+  | Fun _ ts => S
+    ((fix sizelist (ts : list term) : nat :=
+        match ts with
+        | [] => O
+        | t :: ts' => size t + sizelist ts'
+        end) ts)
+  | Param _ bs => S (length bs)
+  | Bound _ => 1
+  end.
+
+
 Definition sizeOrder (t t' : term) :=
   sizeT t < sizeT t'.
 
@@ -134,19 +148,148 @@ Definition sizeOrder (t t' : term) :=
 (*   | _ => false *)
 (*   end. *)
 
-Fixpoint occurs0 (a : string) (t : term) : bool :=
-  match t with
-  | Var b => beq_string a b
-  | Param _ bs => existsb (beq_string a) bs
-  | Fun _ ts =>
-    ((fix occurs'_list (a : string) (ts : list term) { struct ts } :=
-        match ts with
-        | [] => false
-        | t :: ts' => orb (occurs0 a t) (occurs'_list a ts')
-        end) a ts)
-  | _ => false
-  end.
+Definition occurs (a : string) (t : term) : bool :=
+  orb (existsb (beq_string a) (term_vars t []))
+      (existsb (beq_string a) (List.flat_map snd (term_params t []))).
 
+
+Example occurs_test1 : occurs "x" (Var "x") = true.
+Proof. reflexivity. Qed.
+
+Example occurs_test2 : occurs "t" (Fun "P" [Var "t"; Var "b"; Var "t"]) = true.
+Proof. reflexivity. Qed.
+
+Example occurs_test3 : occurs "t" (Fun "t" [Var "z"; Var "y"; Var "x"]) = false.
+Proof. reflexivity. Qed.
+
+Example occurs_test4 : occurs "x" (Param "f" ["x"; "y"; "z"]) = true.
+Proof. reflexivity. Qed.
+
+Example occurs_test5 : occurs "x" (Fun "PRED" [Var "z"; Param "f" ["x"; "y"; "z"]]) = true.
+Proof. reflexivity. Qed.
+
+Example occurs_test6 :
+  occurs "x" (Fun "PRED" [Var "t"; Fun "-1" [Param "f" ["x"]]; Fun "O" [Param "x" ["f"]]]) = true.
+Proof. reflexivity. Qed.
+
+Example occurs_test7 :
+  occurs "t" (Fun "PRED" [Var "t"; Fun "-1" [Param "f" ["x"]]; Fun "O" [Param "x" ["f"]]]) = true.
+Proof. reflexivity. Qed.
+
+Example occurs_test8 :
+  occurs "z" (Fun "PRED" [Var "t"; Fun "-1" [Param "f" ["x"]]; Fun "O" [Param "x" ["f"]]]) = false.
+Proof. reflexivity. Qed.
+
+Theorem occurs_var : forall s s' : string, occurs s (Var s') = true -> s = s'.
+Proof.
+  intros s s' H. unfold occurs in H. simpl in *. apply Bool.orb_true_iff in H. destruct H.
+  - apply Bool.orb_true_iff in H. destruct H.
+    + apply beq_string_true_iff. assumption.
+    + inversion H.
+  - inversion H.
+Qed.
+
+Theorem occurs_env_inv : forall (es : list string) (ps : list (string * list string)) (t : term) (s : string),
+    occurs s t = true -> In s (term_vars t es) \/ In s (List.flat_map snd (term_params t ps)).
+Proof.
+  intros es ps t s H. induction t using @term_ind'.
+  - simpl in *. left. apply occurs_var in H. subst. induction es.
+    + simpl. left. trivial.
+    + simpl. destruct (string_dec s0 a) eqn:H.
+      * simpl. left. trivial.
+      * simpl. right. assumption.
+  - unfold occurs in H. simpl in *. right. induction ps.
+    + rewrite app_nil_r in *. apply existsb_exists in H.
+      destruct H as [s' [H1 H2]]. apply beq_string_true_iff in H2. subst.
+      assumption.
+    + simpl in *. rewrite in_app_iff in *. destruct IHps eqn:H'.
+      * left. assumption.
+      * right. apply in_app_iff. right. assumption.
+  - inversion H.
+  - admit.
+Admitted.
+
+Section Occ.
+
+  Fixpoint occurs_fuel (n : nat) (e : env) (s : string) (t : term) : bool :=
+    match n with
+    | O => false
+    | S n' => match t with
+             | Var x => orb (beq_string x s)
+                           (let v := env_lookup e x in
+                            match v with
+                            | Some t => occurs_fuel n' e s t
+                            | _ => false
+                            end)
+             | Fun _ ts =>
+               ((fix occurs'_list (s : string) (ts : list term) :=
+                   match ts with
+                   | [] => false
+                   | v :: vs => orb (occurs_fuel n' e s v)
+                                   (occurs'_list s vs)
+                   end) s ts)
+             | Param _ bs =>
+               ((fix occurs'_params (s : string) (ss : list string) :=
+                   match ss with
+                   | [] => false
+                   | v :: vs => orb (occurs_fuel n' e s (Var v))
+                                   (occurs'_params s vs)
+                   end) s bs)
+             | _ => false
+             end
+    end.
+
+  Definition occ (e : env) (s : string) (t : term) : bool :=
+    occurs_fuel (Nat.max (length e) (size t)) e s t.
+
+  Definition oc' (s : string) (t : term) := occ [] s t.
+
+  Example oc'_test1 : oc' "x" (Var "x") = true.
+  Proof. reflexivity. Qed.
+  Example oc'_test2 : oc' "t" (Fun "P" [Var "t"; Var "b"; Var "t"]) = true.
+  Proof. reflexivity. Qed.
+  Example oc'_test3 : oc' "t" (Fun "t" [Var "z"; Var "y"; Var "x"]) = false.
+  Proof. reflexivity. Qed.
+  Example oc'_test4 : oc' "x" (Param "f" ["x"; "y"; "z"]) = true.
+  Proof. reflexivity. Qed.
+  Example oc'_test5 : oc' "x" (Fun "PRED" [Var "z"; Param "f" ["x"; "y"; "z"]]) = true.
+  Proof. reflexivity. Qed.
+  Example oc'_test6 :
+    oc' "x" (Fun "PRED" [Var "t"; Fun "-1" [Param "f" ["x"]]; Fun "O" [Param "x" ["f"]]]) = true.
+  Proof. reflexivity. Qed.
+  Example oc'_test7 :
+    oc' "t" (Fun "PRED" [Var "t"; Fun "-1" [Param "f" ["x"]]; Fun "O" [Param "x" ["f"]]]) = true.
+  Proof. reflexivity. Qed.
+  Example oc'_test8 :
+    oc' "z" (Fun "PRED" [Var "t"; Fun "-1" [Param "f" ["x"]]; Fun "O" [Param "x" ["f"]]]) = false.
+  Proof. reflexivity. Qed.
+
+  Theorem oc'_var_eq : forall s s', oc' s (Var s') = true -> s = s'.
+  Proof.
+    intros s s' H. unfold oc' in H. unfold occ in H. simpl in *.
+    destruct (beq_string s' s) eqn:H'.
+    - apply beq_string_true_iff. rewrite beq_string_comm. assumption.
+    - inversion H.
+  Qed.
+
+  (* Theorem oc'_occurs_equiv : forall s t, oc' s t = occurs s t. *)
+  (* Proof. *)
+  (*   intros s t. induction t using @term_ind'. *)
+  (*   - unfold occurs, oc', occ. simpl in *. rewrite beq_string_comm. *)
+  (*     destruct (beq_string s s0); simpl; trivial. *)
+  (*   - induction ls. *)
+  (*     + trivial. *)
+  (*     + unfold occurs, oc', occ. simpl in *. destruct (beq_string a s) eqn:H. *)
+  (*       * simpl. unfold "||". rewrite beq_string_comm, H. trivial. *)
+  (*       * edestruct (_ s ls). *)
+  (*         ++ rewrite app_nil_r, beq_string_comm, H. simpl. *)
+  (*            destruct (oc' s (Param s0 ls)). *)
+  (*            ** unfold occurs in IHls. simpl in IHls. rewrite app_nil_r in IHls. *)
+  (*               assumption. *)
+  (*            ** unfold occurs in IHls. simpl in IHls. rewrite app_nil_r in IHls. *)
+  (*               rewrite <- IHls.  *)
+End Occ.
+               
 (** * Well-Formedness Conditions *)
 
 Definition context := list string.
@@ -252,6 +395,7 @@ Definition well_founded_contraints_lt : well_founded constraints_lt :=
               (fun (x : context) (l l' : list constr) => list_measure l < list_measure l')
               (well_founded_ltof context (@length string))
               (fun _ => well_founded_ltof (list constr) list_measure).
+
 
 (* Program Fixpoint some_occurs (e : env) (a : string) (t : term) { measure (size t) } := *)
 (*   match t with *)

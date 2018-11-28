@@ -45,6 +45,13 @@ Proof.
   intros H. assumption.
 Qed.
 
+Theorem beq_string_comm : forall s s', beq_string s s' = beq_string s' s.
+Proof.
+  intros s s'. destruct (beq_string s s') eqn:H1.
+  - apply beq_string_true_iff in H1. symmetry. rewrite beq_string_true_iff. auto.
+  - apply beq_string_false_iff in H1. symmetry. rewrite beq_string_false_iff. auto.
+Qed.
+
 Fixpoint beq_string_list (ss : list string) (ts : list string) :=
   match ss with
   | [] => match ts with
@@ -70,3 +77,7 @@ Fixpoint insert_string (s : string) (ls : list string) :=
   | [] => [s]
   | t :: ts => if string_dec s t then s :: ts else t :: (insert_string s ts)
   end.
+
+Definition string_decP s1 s2 : Prop :=
+  if string_dec s1 s2 then True else False.
+
