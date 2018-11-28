@@ -72,54 +72,6 @@ Example chase_test3 :
   chase [("x", Var "y")] (Var "d") = None.
 Proof. reflexivity. Qed.
 
-(* Section OCCURS. *)
-(*   Variable e : env. *)
-
-(*   Inductive occurs : string -> term -> Prop := *)
-(*   | occF : forall s t ts, Exists (occurs s) ts -> occurs s (Fun t ts) *)
-(*   | occP : forall s b bs, Exists (occurs s) (List.map Var bs) -> occurs s (Param b bs) *)
-(*   | occVb : forall s b, beq_string s b = true -> occurs s (Var b) *)
-(*   | occVr : forall s b t, env_lookup e s = Some t -> occurs s t -> occurs s (Var b). *)
-
-(*   Definition occurs_dec : forall s t, { occurs s t } + { ~ occurs s t }. *)
-(*   Proof. *)
-(*     intros. destruct t eqn:T. *)
-(*     - compute. destruct (beq_string s s0) eqn:H. *)
-(*       + left. eapply occVb. assumption. *)
-(*       + right. pose proof (occVb s s0). *)
-(*         admit. *)
-(*     - admit. *)
-(*     - admit. *)
-(*     - admit. *)
-(*       all : fail. *)
-(*   Admitted. *)
-(* End OCCURS. *)
-
-Print well_founded.
-Print Acc.
-Print Fix.
-
-(** * Dealing with the Occurs Check *)
-(** 1. Use an [Inductive] type and then show that the relation is decidable.
-    2. Use the [Fix] combinator with a well founded ordering
-    3. Use [Program Fixpoint] with a well founded ordering *)
-
-(** Think about other ways of defining the occurs check.  Computing the free and bound
-    variables can help *)
-
-Fixpoint sizeT (t : term) : nat :=
-  match t with
-  | Var _ => 1
-  | Fun _ ts => 1 +
-    ((fix sizeT' (ts : list term) { struct ts } :=
-        match ts with
-        | [] => 0
-        | t :: ts' => sizeT t + sizeT' ts'
-        end) ts)
-  | Param _ bs => length bs
-  | Bound _ => 1
-  end.
-
 Fixpoint size (t : term) : nat :=
   match t with
   | Var _ => 1
@@ -133,25 +85,9 @@ Fixpoint size (t : term) : nat :=
   | Bound _ => 1
   end.
 
-
-Definition sizeOrder (t t' : term) :=
-  sizeT t < sizeT t'.
-
-(* Program Fixpoint occurs (e : env) (a : string) (t : term) {measure (sizeT t)} := *)
-(*   match t with *)
-(*   | Fun _ ts => existsb (fun y => occurs e a y) ts *)
-(*   | Param _ bs => existsb (fun y => occurs e a y) (List.map Var bs) *)
-(*   | Var b => orb (beq_string a b) (match env_lookup  e b with *)
-(*                                   | Some x => occurs e a x *)
-(*                                   | _ => false *)
-(*                                   end) *)
-(*   | _ => false *)
-(*   end. *)
-
 Definition occurs (a : string) (t : term) : bool :=
   orb (existsb (beq_string a) (term_vars t []))
       (existsb (beq_string a) (List.flat_map snd (term_params t []))).
-
 
 Example occurs_test1 : occurs "x" (Var "x") = true.
 Proof. reflexivity. Qed.
@@ -388,54 +324,9 @@ Definition constraints_lt : constraints -> constraints -> Prop :=
           (fun (x y : context) => length x < length y)
           (fun (x : context) (l l' : list constr) => list_measure l < list_measure l').
 
-(*! NEED TO CHECK THIS CAREFULLY *)
 Definition well_founded_contraints_lt : well_founded constraints_lt :=
   @wf_lexprod context (fun _ : context => list constr)
               (fun (x y : context) => length x < length y)
               (fun (x : context) (l l' : list constr) => list_measure l < list_measure l')
               (well_founded_ltof context (@length string))
               (fun _ => well_founded_ltof (list constr) list_measure).
-
-
-(* Program Fixpoint some_occurs (e : env) (a : string) (t : term) { measure (size t) } := *)
-(*   match t with *)
-(*   | Fun _ ts => existsb (fun y => some_occurs e a y) ts *)
-(*   | Param _ bs => existsb (fun y => some_occurs e a (Var y)) bs *)
-(*   | Var b => orb (beq_string a b) (match env_lookup e b with *)
-(*                                   | Some x => some_occurs e a x *)
-(*                                   | _ => false *)
-(*                                   end) *)
-(*   | _ => false *)
-(*   end. *)
-
-(* Fixpoint occurs' (e : env) (a : string) (t : term) : Prop := *)
-(*   match t with *)
-(*   | Fun _ ts => *)
-(*     ((fix occurs'_list (a : string) (ts : list term) { struct ts } := *)
-(*         match ts with *)
-(*         | [] => False *)
-(*         | t :: ts' => occurs' e a t \/ occurs'_list a ts' *)
-(*         end) a ts) *)
-(*   | Param _ bs => *)
-(*     ((fix occurs'_list (a : string) (bs : list string) { struct bs } := *)
-(*         match bs with *)
-(*         | [] => False *)
-(*         | b :: bs' => occurs' e a (Var b) \/ occurs'_list a bs' *)
-(*         end) a bs) *)
-(*   | Var b => if string_dec a b then True else (match env_lookup e b with *)
-(*                                            | Some x => occurs' e a x *)
-(*                                            | _ => False *)
-(*                                            end) *)
-(*   | _ => False *)
-(*   end. *)
-
-(* Function occurs (e : env) (a : string) (t : term) { measure sizeT t } := *)
-(*   match t with *)
-(*   | Fun _ ts => existsb (occurs e a) ts *)
-(*   | Param _ bs => existsb (occurs e a) (List.map Var bs) *)
-(*   | Var b => orb (beq_string a b) (match env_lookup e b with *)
-(*                                   | Some x => occurs e a x *)
-(*                                   | _ => false *)
-(*                                   end) *)
-(*   | _ => false *)
-(*   end. *)
