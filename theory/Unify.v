@@ -2,37 +2,11 @@ Require Import VHal.theory.Fol.
 Require Import VHal.theory.Util.
 Require Import VHal.theory.Maps.
 Require Import Coq.Lists.List.
-Require Import Recdef.
 Require Import Coq.Logic.Decidable.
 Require Import Coq.Program.Wf.
 Require Import Coq.omega.Omega.
 Import ListNotations.
 
-(*+ Environments *)
-
-(*! An attempt at using Dependent Types *)
-Inductive envd : nat -> partial_map term -> Type :=
-| EO : envd O empty
-| ES : forall n m s t, envd n m -> envd (S n) (m & {s --> t}).
-
-Definition envd_update {n} {m} e s t : envd (S n) (m & {s --> t}) :=
-  ES n m s t e.
-
-Definition envd_lookup {n} {m} (e : envd n m) (s : string) := m s.
-
-Notation " e & {| a --> x |} " := (envd_update e a (Some x)) (at level 20).
-Notation " e & {| a --> x ; b --> y |} " :=
-  (envd_update (e & {| a --> x |}) b (Some y)) (at level 20).
-Notation " e & {| a --> x ; b --> y ; c --> z |} " :=
-  (envd_update (e & {| a --> x; b --> y|}) c (Some z)) (at level 20).
-Notation " e % x " := (envd_lookup e x) (at level 20).
-
-Compute EO % "x".
-Compute (EO & {| "x" --> Var "z" |}).
-Compute (EO & {| "x" --> Bound O ; "y" --> Bound 1 |}).
-Compute (EO & {| "x" --> Bound O ; "y" --> Bound 1 ; "z" --> Bound 2 |}) % "z".
-
-(*! List representation *)
 Definition env := list (string * term).
 
 Definition env_update (e : env) (s : string) (t : term) := (s,t) :: e.
@@ -43,6 +17,7 @@ Fixpoint env_lookup (e : env) (s : string) :=
   | (s',t) :: ts => if beq_string s s'
                    then Some t else env_lookup ts s
   end.
+
 
 (*+ Unification *)
 
@@ -225,108 +200,109 @@ Section Occ.
   (*            ** unfold occurs in IHls. simpl in IHls. rewrite app_nil_r in IHls. *)
   (*               rewrite <- IHls.  *)
 End Occ.
-               
-(** * Well-Formedness Conditions *)
 
-Definition context := list string.
-
-Fixpoint member (C : context) (s : string) : Prop :=
-  match C with
-  | [] => False
-  | v :: vs => if string_dec s v then True else member vs s
+Definition chase' (e : env) (t : term) : option term :=
+  let v := chase e t in
+  match v with
+  | None => Some t
+  | _ => v
   end.
 
-Definition member_dec : forall C i, { member C i } + { ~ member C i }.
+Definition get_env (e' : nat * env) : env := let (_, v) := e' in v.
+
+Fixpoint unify_fuel (n : nat) (e : env) (s : term) (t : term) : option (nat * env) :=
+  match n with
+  | S m => match s, t with
+          | Var a as s', _ => if beq_term t s' then ret (m, e)
+                             else if oc' a t then None
+                                  else ret (m, (env_update e a t))
+          | _, Var a => unify_fuel m e (Var a) s
+          | Param a _, Param b _ => if beq_string a b then ret (m, e) else None
+          | Fun a ts, Fun b us => if beq_string a b then unifyl_fuel m e ts us else None
+          | _, _ => None
+          end
+  | O => None
+  end
+with unifyl_fuel (n : nat) (e : env) (ts : list term) (us : list term) : option (nat * env) :=
+       match n with
+       | S m => match ts, us with
+               | [], [] => ret (m, e)
+               | t :: ts', u :: us' => (chase' e t) >>= (fun t' =>
+                                      (chase' e u) >>= (fun u' =>
+                                      (unify_fuel m e t' u') >>= (fun e' =>
+                                      (unifyl_fuel m (get_env e') ts' us'))))
+               | _, _ => None
+               end
+       | O => None
+       end.
+
+Definition unify (s : term) (t : term) :=
+  (unify_fuel (2 ^ (size s) * (size t)) [] s t) >>= (fun e => ret (get_env e)).
+
+Definition unify_lists (ts : list term) (us : list term) :=
+  if beq_nat (length ts) (length us) then
+    (unifyl_fuel (2 ^ (List.fold_right plus O (List.map size ts))) [] ts us) >>= (fun e => ret (get_env e))
+  else None.
+
+Example ul_test1 : unify_lists [Var "c"; Var "x"] [Var "x"; Var "c"] = Some [("x", Var "c"); ("c", Var "x")].
+Proof. reflexivity. Qed.
+
+Theorem ul_nil : forall e, unify_lists [] [] = Some e -> e = [].
 Proof.
-  refine (fix member_dec (C : context) (i : string) : { member C i } + { ~ member C i } :=
-            match C with
-            | [] => right _ _
-            | v :: vs =>
-              match string_dec v i with
-              | left _ => left _ _
-              | right _ =>
-                match member_dec vs i with
-                | left _ => left _ _
-                | right _ => right _ _
-                end
-              end
-            end); auto.
-  - unfold member. destruct (string_dec i v) eqn:H; auto.
-    + unfold "~" in n; symmetry in e. pose proof (n e). inversion H0.
-  - simpl. destruct (string_dec i v); auto.
-  - simpl. destruct (string_dec i v); auto.
-Defined.
+  intros e H. compute in H. inversion H. reflexivity.
+Qed.
 
-Fixpoint wf_term (C : context) (t : term) : Prop :=
-  match t with
-  | Var x => member C x
-  | Fun _ ts =>
-    ((fix wf_termlist (ts : list term) : Prop :=
-        match ts with
-        | [] => True
-        | t :: ts' => wf_term C t /\ wf_termlist ts'
-        end) ts)
-  | _ => True
-  end.
-
-Definition wf_term_dec : forall C t, { wf_term C t } + { ~ wf_term C t }.
+Theorem ul_nil_l_some : forall ts e, unify_lists [] ts = Some e -> ts = [].
 Proof.
-  refine (fix wf_term_dec (C : context) (t : term) : { wf_term C t } + { ~ wf_term C t } :=
-            match t with
-            | Var x => if member_dec C x then left _ _ else right _ _
-            | Fun _ ts =>
-              ((fix wf_termlist_dec (C : context) (ts : list term) :=
-                  match ts with
-                  | [] => left _ _
-                  | t :: ts' => match wf_term_dec C t, wf_termlist_dec C ts' with
-                               | left _, left _ => left _ _
-                               | _, _ => right _ _
-                               end
-                  end) C ts)
-            | _ => left _ _
-            end); (simpl; try assumption; try auto); (unfold "~"; intros; firstorder).
-Defined.
+  intros ts e H. induction ts.
+  - reflexivity.
+  - discriminate.
+Qed.
 
-Require Import Wellfounded.Lexicographic_Product.
-Require Import Relation_Operators.
+Theorem ul_nil_r_some : forall ts e, unify_lists ts [] = Some e -> ts = [].
+Proof.
+  intros ts e H. induction ts.
+  - reflexivity.
+  - compute in H. inversion H.
+Qed.
 
-Definition constr := (term * term)%type.
-Definition constraints := sigT (fun _ : context => list constr).
-Definition get_list_constr (c : constraints) : list constr := let (_, l) := c in l.
-Definition mk_constraints (C : context) (l : list constr) : constraints := existT _ C l.
+(*! Need to prove more theorems about unify_lists *)
 
-Fixpoint size (t : term) : nat :=
-  match t with
-  | Var _ => 1
-  | Fun _ ts => S
-    ((fix sizelist (ts : list term) : nat :=
-        match ts with
-        | [] => O
-        | t :: ts' => size t + sizelist ts'
-        end) ts)
-  | Param _ bs => S (length bs)
-  | Bound _ => 1
+
+Definition atoms (f : formula) (g : formula) :=
+  match f, g with
+  | Pred a ts, Pred b us => if beq_string a b then unify_lists ts us else None
+  | _, _ => None
   end.
 
-Definition constr_size (c : constr) : nat :=
-  match c with
-    (t, t') => size t + size t'
+
+Fixpoint inst_term_fuel (n : nat) (e : env) (t : term) :=
+  match n with
+  | S m => match t with
+          | Fun a ts => Fun a (List.map (inst_term_fuel m e) ts)
+          | Param a bs => Param a (List.fold_right term_vars [] (List.map (fun x => inst_term_fuel m e (Var x)) bs))
+          | Var a => match env_lookup e a with
+                    | Some t' => inst_term_fuel m e t'
+                    | None => Var a
+                    end
+          | _ => t
+          end
+  | O => t
   end.
 
-Fixpoint list_measure (l : list constr) : nat :=
-  match l with
-  | [] => O
-  | c :: cs => constr_size c + list_measure cs
+Definition inst_term (e : env) (t : term) :=
+  inst_term_fuel (2 ^ (length e)) e t.
+
+
+Fixpoint inst_form (e : env) (f : formula) :=
+  match f with
+  | Pred a ts => Pred a (List.map (inst_term e) ts)
+  | Conn b ps => Conn b (List.map (inst_form e) ps)
+  | Quant qnt b p => Quant qnt b (inst_form e p)
   end.
 
-Definition constraints_lt : constraints -> constraints -> Prop :=
-  lexprod context (fun _ => list constr)
-          (fun (x y : context) => length x < length y)
-          (fun (x : context) (l l' : list constr) => list_measure l < list_measure l').
+Definition inst_goal (e : env) (g : goal) :=
+  match g with
+    | G (ps, qs) => (List.map (inst_form e) ps, List.map (inst_form e) qs)
+  end.
 
-Definition well_founded_contraints_lt : well_founded constraints_lt :=
-  @wf_lexprod context (fun _ : context => list constr)
-              (fun (x y : context) => length x < length y)
-              (fun (x : context) (l l' : list constr) => list_measure l < list_measure l')
-              (well_founded_ltof context (@length string))
-              (fun _ => well_founded_ltof (list constr) list_measure).

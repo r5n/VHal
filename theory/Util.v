@@ -81,3 +81,21 @@ Fixpoint insert_string (s : string) (ls : list string) :=
 Definition string_decP s1 s2 : Prop :=
   if string_dec s1 s2 then True else False.
 
+Definition ret {A : Type} (x : A) := Some x.
+Definition bind {A B : Type} (a : option A) (f : A -> option B) : option B :=
+  match a with
+  | Some x => f x
+  | None => None
+  end.
+
+Notation "A >>= F" := (bind A F) (at level 42, left associativity).
+
+Lemma M_id_l : forall (A B : Type) (a : A) (f : A -> option B), ret a >>= f = f a.
+Proof. intros. reflexivity. Qed.
+
+Lemma M_id_r : forall (A : Type) (a : option A), a >>= ret = a.
+Proof. intros. induction a; reflexivity. Qed.
+
+Lemma M_assoc : forall (A B C : Type) (a : option A) (f : A -> option B) (g : B -> option C),
+    (a >>= f) >>= g = a >>= (fun x => f x >>= g).
+Proof. intros. induction a; reflexivity. Qed.

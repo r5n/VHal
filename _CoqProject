@@ -1,5 +1,6 @@
 theory/Fol.v
 theory/Util.v
 theory/Maps.v
+theory/Unify.v
 
 -R . VHal
