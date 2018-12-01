@@ -221,5 +221,67 @@ Fixpoint term_params (t : term) (ps : list (string * list string)) :=
   end.
 
 
+(*+ Functions on [formula] *)
 
-  
+Fixpoint beq_term_list (ts : list term) (us : list term) : bool :=
+  match ts, us with
+  | [], [] => true
+  | _, [] => false
+  | [], _ => false
+  | x :: xs, y :: ys => andb (beq_term x y) (beq_term_list xs ys)
+  end.
+
+Fixpoint beq_formula (f1 : formula) (f2 : formula) : bool :=
+  match f1, f2 with
+  | Pred a ts, Pred b us => andb (beq_string a b) (beq_term_list ts us)
+  | Conn a fs, Conn b gs => andb (beq_string a b)
+    ((fix beq_formula_list (ts : list formula) (us : list formula) : bool :=
+        match ts, us with
+        | [], [] => true
+        | _, [] => false
+        | [], _ => false
+        | x :: xs, y :: ys => andb (beq_formula x y) (beq_formula_list xs ys)
+        end) fs gs)
+  | Quant a0 b0 f0, Quant a1 b1 f1 =>
+    andb (beq_string a0 a1)
+         (andb (beq_string b0 b1)
+               (beq_formula f0 f1))
+  | _, _ => false 
+  end.
+
+
+Lemma beq_term_list_refl : forall (ls : list term), true = beq_term_list ls ls.
+Proof.
+  intros ls. induction ls.
+  - reflexivity.
+  - simpl. rewrite beq_term_refl. apply IHls.
+Qed.
+
+Lemma beq_formula_refl : forall (f : formula), true = beq_formula f f.
+Proof.
+  intros f. induction f using @formula_ind'.
+  - simpl. rewrite <- beq_string_refl. apply beq_term_list_refl.
+  - simpl. rewrite <- beq_string_refl. simpl. induction ls as [| a l IHl].
+    + reflexivity.
+    + inversion H. pose proof (IHl H3). rewrite <- H4. rewrite <- H2. reflexivity.
+  - simpl. rewrite <- beq_string_refl, <- beq_string_refl. rewrite <- IHf.
+    reflexivity.
+Qed.
+
+(*+ Functions on Goals *)
+
+Fixpoint accum_form {A : Type} (g : term -> A -> A) (f : formula) (z : A) :=
+  match f with
+  | Pred _ ts => List.fold_right g z ts
+  | Conn _ ps => List.fold_right (accum_form g) z ps
+  | Quant _ _ p => accum_form g p z
+  end.
+
+Fixpoint accum_goal {A : Type} (f : formula -> A -> A) (g : goal) (z : A) :=
+  match g with
+  | G (ps, qs) => List.fold_right f (List.fold_right f z qs) ps
+  end.
+
+Definition goal_vars := accum_goal (accum_form term_vars).
+
+Definition goal_params := accum_goal (accum_form term_params).

@@ -303,6 +303,5 @@ Fixpoint inst_form (e : env) (f : formula) :=
 
 Definition inst_goal (e : env) (g : goal) :=
   match g with
-    | G (ps, qs) => (List.map (inst_form e) ps, List.map (inst_form e) qs)
+    | G (ps, qs) => G (List.map (inst_form e) ps, List.map (inst_form e) qs)
   end.
-
