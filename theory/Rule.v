@@ -31,7 +31,7 @@ Definition final (s : state) :=
   end.
 
 Definition splice_goals (gs : list goal) (newgs : list goal) (i : nat) :=
-  List.firstn i gs ++ newgs ++ List.skipn i gs.
+  List.firstn (i - 1) gs ++ newgs ++ List.skipn i gs.
 
 
 Definition prop_rule (gF : goal -> option (list goal)) (i : nat) (s : state) :=
@@ -223,7 +223,7 @@ Fixpoint quant_rule (gF : goal -> string -> option (list goal)) (i : nat) (s : s
   match s with
   | State gs p n =>
     (List.nth_error gs (i-1)) >>=
-    (fun g__i => gF g__i (gensym n) >>=
+    (fun gi => gF gi (gensym n) >>=
     (fun gs' => ret (splice_goals gs gs' i) >>=
     (fun g2 => ret [State g2 p (n + 1)])))
   end.
@@ -277,7 +277,7 @@ Definition exR : nat -> tactic :=
     (fun x b =>
        match x with
        | G (ps, qs) =>
-         (split_quant "EX" ps) >>=
+         (split_quant "EX" qs) >>=
          (fun qntForm => match qntForm with
                       | ((Quant _ _ q) as q', qs') =>
                         let qx := subst' O (Var b) q in
