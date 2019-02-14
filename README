@@ -13,8 +13,54 @@ This is a simple implementation of Hal in Coq, written as part of a
 Final Project for the course CS 643 - Formal Verification of Software
 at Stevens Institute of Technology.
 
-Parts of the unification routine are borrowed from Riberio et. al[2].
-This is a work in progress.
+
+Usage
+-----
+
+Key modules of the theorem prover (the AST, unification algorithm, and
+tactics) are written in Gallina, and the rest (parser, pretty printer,
+and driver loop) are written in OCaml.  Note that the unification
+algorithm has not been verified yet.  However, the verified
+unification algorithm presented by Riberio et. al[2] might be
+appropriated for use here.
+
+To run simply build all the modules in `./ml` and execute `main.ml` in
+an OCaml REPL.  A sample session might look like this,
+
+# getState();;
+No goal yet!
+ 1. empty |- No goal yet!
+
+# thm "P & Q --> Q & P";;
+P & Q --> Q & P
+ 1. empty |- P & Q --> Q & P
+
+# by (impR 1);;
+P & Q --> Q & P
+ 1. P & Q |- Q & P
+
+# by (conjL 1);;
+P & Q --> Q & P
+ 1. P, Q |- Q & P
+
+# by (conjR 1);;
+P & Q --> Q & P
+ 1. P, Q |- Q
+ 2. P, Q |- P
+
+# by (basic 1);;
+P & Q --> Q & P
+ 1. P, Q |- P
+
+# by (basic 1);;
+P & Q --> Q & P
+No subgoals let!
+
+While this is a simple example, it goes to demonstrate how this system
+might be used.  In particular, the tactics and their use is exactly
+the same as in the Hal theorem prover.  Note that tacticals as
+presented _ML for the Working Programmer_ haven't been implemented.
+
 
 References
 ----------
