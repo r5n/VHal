@@ -25,22 +25,22 @@
 main: form EOF                            { $1 }
 
 form:
-  | ALL; x = IDENT; PERIOD; f = form      { makeForall x f }
-  | EX; x = IDENT; PERIOD; f = form       { makeExists x f }
-  | f1 = form; AND; f2 = form             { makeConn "&" f1 f2 }
-  | f1 = form; OR; f2 = form              { makeConn "|" f1 f2 }
-  | f1 = form; IMPL; f2 = form            { makeConn "-->" f1 f2 }
-  | f1 = form; IFF; f2 = form             { makeConn "<->" f1 f2 }
-  | NEG; f = form                         { makeNeg f }
-  | x = IDENT                             { Pred(stocs x, []) }
-  | x = IDENT; LPAREN; ts = terms; RPAREN { Pred(stocs x, ts) }
-  | LPAREN; f = form; RPAREN              { f }
+  | LPAREN; ALL; x = IDENT; PERIOD; f = form; RPAREN { makeForall x f }
+  | LPAREN; EX; x = IDENT; PERIOD; f = form; RPAREN  { makeExists x f }
+  | f1 = form; AND; f2 = form                        { makeConn "&" f1 f2 }
+  | f1 = form; OR; f2 = form                         { makeConn "|" f1 f2 }
+  | f1 = form; IMPL; f2 = form                       { makeConn "-->" f1 f2 }
+  | f1 = form; IFF; f2 = form                        { makeConn "<->" f1 f2 }
+  | NEG; f = form                                    { makeNeg f }
+  | x = IDENT                                        { Pred(stocs x, []) }
+  | x = IDENT; LPAREN; ts = terms; RPAREN            { Pred(stocs x, ts) }
+  | LPAREN; f = form; RPAREN                         { f }
   ;
 
 
-terms: ts = separated_list(COMMA, term)   { ts };
+terms: ts = LPAREN; separated_list(COMMA, term); RPAREN { ts };
 
 term:
-  | x = IDENT; ys = terms                 { Fun(stocs x, ys) }
-  | QUESTION; x = IDENT                   { Var(stocs x) }
+  | x = IDENT; ys = terms { Fun(stocs x, ys) }
+  | QUESTION; x = IDENT   { Var(stocs x) }
   ;
